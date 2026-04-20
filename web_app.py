@@ -26,13 +26,15 @@ st.sidebar.text_input("Admin Password", type="password", key="admin_pwd")
 # The app checks if the memory vault contains the correct password
 is_admin = (st.session_state['admin_pwd'] == "admin123")
 
+# Create a callback function to clear the password BEFORE the page reloads
+def trigger_logout():
+    st.session_state['admin_pwd'] = ""
+
 if is_admin:
     st.sidebar.success("Admin Mode Unlocked")
     
-    # ---> NEW FEATURE: LOGOUT BUTTON <---
-    if st.sidebar.button("Logout"):
-        st.session_state['admin_pwd'] = ""  # This deletes the password
-        st.rerun()  # This instantly refreshes the page to hide Step 1
+    # Attach the callback using on_click
+    st.sidebar.button("Logout", on_click=trigger_logout)
         
 st.sidebar.markdown("---")
 st.sidebar.caption("Adib Affandi")
