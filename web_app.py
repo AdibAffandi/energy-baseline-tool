@@ -51,7 +51,7 @@ if is_admin:
         st.write("Preview:", df_baseline.head(3))
         
         cols = list(df_baseline.columns)
-        target_y = st.selectbox("Select Energy (Y):", cols)
+        target_y = st.selectbox("Select Energy/Electricity Consumption Column (Y):", cols)
         selected_x_vars = st.multiselect("Select Variables (X):", cols)
         
         if st.button("Run MLR Baseline Analysis", type="primary"):
@@ -95,7 +95,7 @@ else:
         # CSV Preview for the staff
         st.write("Preview:", df_reporting.head(3))
         
-        y_col = st.selectbox("Select Actual Energy (Y):", list(df_reporting.columns))
+        y_col = st.selectbox("Select Actual Energy/Electricity Consumption Column (Y):", list(df_reporting.columns))
         
         if st.button("Calculate Energy Savings", type="primary"):
             model_data = st.session_state['model_data']
