@@ -13,24 +13,35 @@ st.set_page_config(page_title="Adib M&V Web Tool", layout="wide")
 if 'model_data' not in st.session_state:
     st.session_state['model_data'] = None
 
+# We add a session state for the password so we can clear it later
+if 'admin_pwd' not in st.session_state:
+    st.session_state['admin_pwd'] = ""
+
 # --- SIDEBAR: ADMIN ACCESS ---
 st.sidebar.title("⚙️ Admin Access")
-admin_pass = st.sidebar.text_input("Admin Password", type="password")
 
-# If the password is correct, flip the switch to unlock Admin mode
-is_admin = (admin_pass == "admin123")
+# Notice we linked this input box to the 'admin_pwd' key
+st.sidebar.text_input("Admin Password", type="password", key="admin_pwd")
+
+# The app checks if the memory vault contains the correct password
+is_admin = (st.session_state['admin_pwd'] == "admin123")
 
 if is_admin:
     st.sidebar.success("Admin Mode Unlocked")
+    
+    # ---> NEW FEATURE: LOGOUT BUTTON <---
+    if st.sidebar.button("Logout"):
+        st.session_state['admin_pwd'] = ""  # This deletes the password
+        st.rerun()  # This instantly refreshes the page to hide Step 1
+        
 st.sidebar.markdown("---")
-st.sidebar.caption("Developed by Adib")
+st.sidebar.caption("Adib Affandi")
 
 st.title("⚡ Energy Baseline M&V Tool")
 
 # ==========================================
 # ADMIN ONLY VIEW: Step 1 Baseline Setup
 # ==========================================
-# This entire section is invisible unless the sidebar password is correct
 if is_admin:
     st.header("Step 1: Admin Baseline Setup")
     base_file = st.file_uploader("Upload Baseline CSV", type=['csv'], key="base")
@@ -70,7 +81,6 @@ if is_admin:
 # ==========================================
 # PUBLIC VIEW: Step 2 Reporting Period
 # ==========================================
-# This section is always visible to everyone who opens the link
 st.header("Step 2: Reporting Period Analysis")
 
 if st.session_state['model_data'] is None:
@@ -82,7 +92,7 @@ else:
     if rep_file:
         df_reporting = pd.read_csv(rep_file)
         
-        # ---> NEW FEATURE: CSV PREVIEW ADDED HERE <---
+        # CSV Preview for the staff
         st.write("Preview:", df_reporting.head(3))
         
         y_col = st.selectbox("Select Actual Energy (Y):", list(df_reporting.columns))
