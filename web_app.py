@@ -5,20 +5,28 @@ from scipy.stats import t
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 import matplotlib.pyplot as plt
+import pickle
+import os
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Adib M&V Web Tool", layout="wide")
 
-# --- SESSION STATE SETUP ---
+# --- SESSION & SERVER MEMORY SETUP ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'role' not in st.session_state:
     st.session_state['role'] = None
-if 'model_data' not in st.session_state:
-    st.session_state['model_data'] = None
+
+# ---> NEW FEATURE: GLOBAL SERVER MEMORY <---
+# This checks the server's hard drive for a saved model every time the page loads
+if 'model_data' not in st.session_state or st.session_state['model_data'] is None:
+    if os.path.exists("saved_baseline.pkl"):
+        with open("saved_baseline.pkl", "rb") as f:
+            st.session_state['model_data'] = pickle.load(f)
+    else:
+        st.session_state['model_data'] = None
 
 # --- CALLBACK FUNCTIONS ---
-# This safely clears the memory before the widgets reload
 def trigger_logout():
     st.session_state['logged_in'] = False
     st.session_state['role'] = None
@@ -35,12 +43,10 @@ if not st.session_state['logged_in']:
     password = st.text_input("Password", type="password")
     
     if st.button("Login", type="primary"):
-        # Admin Login
         if username == "adib" and password == "admin123":
             st.session_state['logged_in'] = True
             st.session_state['role'] = "Admin"
             st.rerun()
-        # End-User Login
         elif username == "staff" and password == "user123":
             st.session_state['logged_in'] = True
             st.session_state['role'] = "User"
@@ -53,10 +59,7 @@ else:
     # AUTHENTICATED VIEW (Logged In)
     # ==========================================
     st.sidebar.title(f"Welcome, {st.session_state['role']}")
-    
-    # Safe logout using the callback!
     st.sidebar.button("Logout", on_click=trigger_logout)
-    
     st.sidebar.markdown("---")
     st.sidebar.caption("Developed by Adib")
     
@@ -92,11 +95,17 @@ else:
                     p = len(selected_x_vars)
                     se = np.sqrt(np.sum((y - y_pred)**2) / (n - p - 1))
                     
-                    # Save model to session state
+                    # 1. Save to current session
                     st.session_state['model_data'] = {
                         'model': model, 'vars': selected_x_vars, 'se': se, 'r2': r2
                     }
-                    st.success(f"✅ Model Trained Successfully! R²: {r2:.4f}")
+                    
+                    # 2. ---> NEW FEATURE: SAVE TO CLOUD HARD DRIVE <---
+                    # This makes it permanent across all devices and page refreshes
+                    with open("saved_baseline.pkl", "wb") as f:
+                        pickle.dump(st.session_state['model_data'], f)
+                        
+                    st.success(f"✅ Model Trained & Saved to Server! R²: {r2:.4f}")
                 else:
                     st.warning("Please select Y and at least one X variable.")
         st.markdown("---")
@@ -114,8 +123,6 @@ else:
         
         if rep_file:
             df_reporting = pd.read_csv(rep_file)
-            
-            # CSV Preview for the staff
             st.write("Preview:", df_reporting.head(3))
             
             y_col = st.selectbox("Select Actual Energy (Y):", list(df_reporting.columns))
