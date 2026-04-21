@@ -36,7 +36,7 @@ if not st.session_state['logged_in']:
     # ==========================================
     # LOGIN SCREEN
     # ==========================================
-    st.title("🔐 Login to M&V Web Portal")
+    st.title("🔐 Login to Energy Baseline Web Tool")
     st.write("Please enter your credentials to access the tool.")
     
     username = st.text_input("Username")
@@ -61,7 +61,7 @@ else:
     st.sidebar.title(f"Welcome, {st.session_state['role']}")
     st.sidebar.button("Logout", on_click=trigger_logout)
     st.sidebar.markdown("---")
-    st.sidebar.caption("Developed by Adib")
+    st.sidebar.caption("Adib Affandi")
     
     st.title("⚡ Energy Baseline M&V Tool")
 
@@ -77,7 +77,7 @@ else:
             st.write("Preview:", df_baseline.head(3))
             
             cols = list(df_baseline.columns)
-            target_y = st.selectbox("Select Energy (Y):", cols)
+            target_y = st.selectbox("Select Energy/Electricity Consumption Column (Y):", cols)
             selected_x_vars = st.multiselect("Select Variables (X):", cols)
             
             if st.button("Run MLR Baseline Analysis", type="primary"):
@@ -125,7 +125,7 @@ else:
             df_reporting = pd.read_csv(rep_file)
             st.write("Preview:", df_reporting.head(3))
             
-            y_col = st.selectbox("Select Actual Energy (Y):", list(df_reporting.columns))
+            y_col = st.selectbox("Select Energy/Electricity Consumption Column (Y):", list(df_reporting.columns))
             
             if st.button("Calculate Energy Savings", type="primary"):
                 model_data = st.session_state['model_data']
