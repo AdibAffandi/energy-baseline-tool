@@ -11,14 +11,21 @@ import os
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Adib M&V Web Tool", layout="wide")
 
+# --- HARDCODED WEATHER DATABASE (CDD) ---
+# The app will automatically inject these into the uploaded CSVs
+CDD_DB = {
+    "2019": [132.0, 132.0, 160.0, 144.0, 155.0, 135.0, 140.0, 138.0, 139.0, 96.0, 105.0, 107.0],
+    "2023": [122.4, 143.1, 158.2, 131.7, 162.8, 151.2, 136.8, 128.9, 132.7, 121.6, 115.8, 108.8],
+    "2024": [122.4, 143.1, 158.2, 150.8, 162.6, 135.1, 169.2, 131.6, 135.8, 137.4, 110.2, 113.7],
+    "2025": [108.9, 117.9, 137.9, 131.9, 165.0, 164.8, 175.7, 144.6, 129.1, 133.4, 119.4, 105.8]
+}
+
 # --- SESSION & SERVER MEMORY SETUP ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'role' not in st.session_state:
     st.session_state['role'] = None
 
-# ---> NEW FEATURE: GLOBAL SERVER MEMORY <---
-# This checks the server's hard drive for a saved model every time the page loads
 if 'model_data' not in st.session_state or st.session_state['model_data'] is None:
     if os.path.exists("saved_baseline.pkl"):
         with open("saved_baseline.pkl", "rb") as f:
@@ -36,7 +43,7 @@ if not st.session_state['logged_in']:
     # ==========================================
     # LOGIN SCREEN
     # ==========================================
-    st.title("🔐 Login to Energy Baseline Web Tool")
+    st.title("🔐 Login to M&V Web Portal")
     st.write("Please enter your credentials to access the tool.")
     
     username = st.text_input("Username")
@@ -61,7 +68,7 @@ else:
     st.sidebar.title(f"Welcome, {st.session_state['role']}")
     st.sidebar.button("Logout", on_click=trigger_logout)
     st.sidebar.markdown("---")
-    st.sidebar.caption("Adib Affandi")
+    st.sidebar.caption("Developed by Adib")
     
     st.title("⚡ Energy Baseline M&V Tool")
 
@@ -70,44 +77,50 @@ else:
     # ------------------------------------------
     if st.session_state['role'] == "Admin":
         st.header("Step 1: Admin Baseline Setup")
-        base_file = st.file_uploader("Upload Baseline CSV", type=['csv'], key="base")
+        
+        # New Dropdown for Year Selection
+        base_year = st.selectbox("Select Baseline Year:", ["2019", "2023", "2024", "2025"], key="base_yr")
+        base_file = st.file_uploader("Upload Baseline CSV (12 Months)", type=['csv'], key="base_csv")
         
         if base_file:
             df_baseline = pd.read_csv(base_file)
-            st.write("Preview:", df_baseline.head(3))
             
-            cols = list(df_baseline.columns)
-            target_y = st.selectbox("Select Energy/Electricity Consumption Column (Y):", cols)
-            selected_x_vars = st.multiselect("Select Variables (X):", cols)
-            
-            if st.button("Run MLR Baseline Analysis", type="primary"):
-                if target_y and selected_x_vars:
-                    clean_df = df_baseline[selected_x_vars + [target_y]].dropna()
-                    X = clean_df[selected_x_vars]
-                    y = clean_df[target_y]
-                    
-                    model = LinearRegression()
-                    model.fit(X, y)
-                    y_pred = model.predict(X)
-                    r2 = r2_score(y, y_pred)
-                    
-                    n = len(X)
-                    p = len(selected_x_vars)
-                    se = np.sqrt(np.sum((y - y_pred)**2) / (n - p - 1))
-                    
-                    # 1. Save to current session
-                    st.session_state['model_data'] = {
-                        'model': model, 'vars': selected_x_vars, 'se': se, 'r2': r2
-                    }
-                    
-                    # 2. ---> NEW FEATURE: SAVE TO CLOUD HARD DRIVE <---
-                    # This makes it permanent across all devices and page refreshes
-                    with open("saved_baseline.pkl", "wb") as f:
-                        pickle.dump(st.session_state['model_data'], f)
+            # Auto-Inject CDD Data
+            if len(df_baseline) == 12:
+                df_baseline['CDD'] = CDD_DB[base_year]
+                st.write("Preview (with auto-injected CDD):", df_baseline.head(3))
+                
+                cols = list(df_baseline.columns)
+                target_y = st.selectbox("Select Energy (Y):", cols)
+                selected_x_vars = st.multiselect("Select Variables (X):", cols, default=["CDD"]) # Auto-selects CDD
+                
+                if st.button("Run MLR Baseline Analysis", type="primary"):
+                    if target_y and selected_x_vars:
+                        clean_df = df_baseline[selected_x_vars + [target_y]].dropna()
+                        X = clean_df[selected_x_vars]
+                        y = clean_df[target_y]
                         
-                    st.success(f"✅ Model Trained & Saved to Server! R²: {r2:.4f}")
-                else:
-                    st.warning("Please select Y and at least one X variable.")
+                        model = LinearRegression()
+                        model.fit(X, y)
+                        y_pred = model.predict(X)
+                        r2 = r2_score(y, y_pred)
+                        
+                        n = len(X)
+                        p = len(selected_x_vars)
+                        se = np.sqrt(np.sum((y - y_pred)**2) / (n - p - 1))
+                        
+                        st.session_state['model_data'] = {
+                            'model': model, 'vars': selected_x_vars, 'se': se, 'r2': r2
+                        }
+                        
+                        with open("saved_baseline.pkl", "wb") as f:
+                            pickle.dump(st.session_state['model_data'], f)
+                            
+                        st.success(f"✅ Model Trained & Saved to Server! R²: {r2:.4f}")
+                    else:
+                        st.warning("Please select Y and at least one X variable.")
+            else:
+                st.error(f"⚠️ Error: Your CSV has {len(df_baseline)} rows. It must have exactly 12 rows (Jan-Dec) for the CDD data to match correctly.")
         st.markdown("---")
 
     # ------------------------------------------
@@ -119,40 +132,49 @@ else:
         st.info("⚠️ Waiting for Admin to setup the Baseline Model.")
     else:
         st.success("✅ Baseline Model is Active and Ready.")
-        rep_file = st.file_uploader("Upload Reporting CSV", type=['csv'], key="rep")
+        
+        # New Dropdown for Year Selection
+        rep_year = st.selectbox("Select Reporting Year:", ["2019", "2023", "2024", "2025"], key="rep_yr")
+        rep_file = st.file_uploader("Upload Reporting CSV (12 Months)", type=['csv'], key="rep_csv")
         
         if rep_file:
             df_reporting = pd.read_csv(rep_file)
-            st.write("Preview:", df_reporting.head(3))
             
-            y_col = st.selectbox("Select Energy/Electricity Consumption Column (Y):", list(df_reporting.columns))
-            
-            if st.button("Calculate Energy Savings", type="primary"):
-                model_data = st.session_state['model_data']
-                x_vars = model_data['vars']
+            # Auto-Inject CDD Data
+            if len(df_reporting) == 12:
+                df_reporting['CDD'] = CDD_DB[rep_year]
+                st.write("Preview (with auto-injected CDD):", df_reporting.head(3))
                 
-                missing = [col for col in x_vars if col not in df_reporting.columns]
-                if missing:
-                    st.error(f"Missing required columns in CSV: {missing}")
-                else:
-                    clean_rep = df_reporting[x_vars + [y_col]].dropna()
-                    X_rep = clean_rep[x_vars]
-                    y_actual = clean_rep[y_col]
+                y_col = st.selectbox("Select Actual Energy (Y):", list(df_reporting.columns))
+                
+                if st.button("Calculate Energy Savings", type="primary"):
+                    model_data = st.session_state['model_data']
+                    x_vars = model_data['vars']
                     
-                    adjusted_baseline = model_data['model'].predict(X_rep)
-                    total_savings = (adjusted_baseline - y_actual).sum()
-                    
-                    st.subheader(f"💰 Total Savings: {total_savings:,.2f} kWh")
-                    
-                    fig, ax = plt.subplots(figsize=(10, 5))
-                    ax.plot(clean_rep.index, adjusted_baseline, label='Adjusted Baseline', color='orange', linestyle='--')
-                    ax.plot(clean_rep.index, y_actual, label='Actual Energy Used', color='blue')
-                    ax.fill_between(clean_rep.index, adjusted_baseline, y_actual, where=(adjusted_baseline > y_actual), color='green', alpha=0.15, label='Savings')
-                    ax.fill_between(clean_rep.index, adjusted_baseline, y_actual, where=(adjusted_baseline <= y_actual), color='red', alpha=0.15, label='Overconsumption')
-                    
-                    ax.set_title('IPMVP Option C (MLR): Reporting Period Savings')
-                    ax.set_ylabel('Energy (kWh)')
-                    ax.legend()
-                    ax.grid(True, alpha=0.5)
-                    
-                    st.pyplot(fig)
+                    missing = [col for col in x_vars if col not in df_reporting.columns]
+                    if missing:
+                        st.error(f"Missing required columns in CSV: {missing}. Make sure you are using the same variables as the baseline.")
+                    else:
+                        clean_rep = df_reporting[x_vars + [y_col]].dropna()
+                        X_rep = clean_rep[x_vars]
+                        y_actual = clean_rep[y_col]
+                        
+                        adjusted_baseline = model_data['model'].predict(X_rep)
+                        total_savings = (adjusted_baseline - y_actual).sum()
+                        
+                        st.subheader(f"💰 Total Savings: {total_savings:,.2f} kWh")
+                        
+                        fig, ax = plt.subplots(figsize=(10, 5))
+                        ax.plot(clean_rep.index, adjusted_baseline, label='Adjusted Baseline', color='orange', linestyle='--')
+                        ax.plot(clean_rep.index, y_actual, label='Actual Energy Used', color='blue')
+                        ax.fill_between(clean_rep.index, adjusted_baseline, y_actual, where=(adjusted_baseline > y_actual), color='green', alpha=0.15, label='Savings')
+                        ax.fill_between(clean_rep.index, adjusted_baseline, y_actual, where=(adjusted_baseline <= y_actual), color='red', alpha=0.15, label='Overconsumption')
+                        
+                        ax.set_title('IPMVP Option C (MLR): Reporting Period Savings')
+                        ax.set_ylabel('Energy (kWh)')
+                        ax.legend()
+                        ax.grid(True, alpha=0.5)
+                        
+                        st.pyplot(fig)
+            else:
+                st.error(f"⚠️ Error: Your CSV has {len(df_reporting)} rows. It must have exactly 12 rows (Jan-Dec) for the CDD data to match correctly.")
