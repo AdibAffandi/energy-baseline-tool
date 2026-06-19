@@ -12,7 +12,6 @@ import os
 st.set_page_config(page_title="Adib M&V Web Tool", layout="wide")
 
 # --- HARDCODED WEATHER DATABASE (CDD) ---
-# The app will automatically inject these into the uploaded CSVs
 CDD_DB = {
     "2019": [132.0, 132.0, 160.0, 144.0, 155.0, 135.0, 140.0, 138.0, 139.0, 96.0, 105.0, 107.0],
     "2023": [122.4, 143.1, 158.2, 131.7, 162.8, 151.2, 136.8, 128.9, 132.7, 121.6, 115.8, 108.8],
@@ -78,7 +77,6 @@ else:
     if st.session_state['role'] == "Admin":
         st.header("Step 1: Admin Baseline Setup")
         
-        # New Dropdown for Year Selection
         base_year = st.selectbox("Select Baseline Year:", ["2019", "2023", "2024", "2025"], key="base_yr")
         base_file = st.file_uploader("Upload Baseline CSV (12 Months)", type=['csv'], key="base_csv")
         
@@ -92,7 +90,7 @@ else:
                 
                 cols = list(df_baseline.columns)
                 target_y = st.selectbox("Select Energy (Y):", cols)
-                selected_x_vars = st.multiselect("Select Variables (X):", cols, default=["CDD"]) # Auto-selects CDD
+                selected_x_vars = st.multiselect("Select Variables (X):", cols, default=["CDD"])
                 
                 if st.button("Run MLR Baseline Analysis", type="primary"):
                     if target_y and selected_x_vars:
@@ -100,27 +98,39 @@ else:
                         X = clean_df[selected_x_vars]
                         y = clean_df[target_y]
                         
+                        # Train Model
                         model = LinearRegression()
                         model.fit(X, y)
                         y_pred = model.predict(X)
-                        r2 = r2_score(y, y_pred)
                         
+                        # --- NEW COMPLIANCE MATH INCORPORATED HERE ---
                         n = len(X)
                         p = len(selected_x_vars)
-                        se = np.sqrt(np.sum((y - y_pred)**2) / (n - p - 1))
+                        y_mean = np.mean(y)
                         
+                        r2 = r2_score(y, y_pred)
+                        rmse = np.sqrt(np.sum((y - y_pred)**2) / (n - p - 1))
+                        cv_rmse = (rmse / y_mean) * 100
+                        nmbe = (np.sum(y - y_pred) / ((n - p - 1) * y_mean)) * 100
+                        
+                        # Save model & metrics to server
                         st.session_state['model_data'] = {
-                            'model': model, 'vars': selected_x_vars, 'se': se, 'r2': r2
+                            'model': model, 'vars': selected_x_vars, 'r2': r2, 'cv_rmse': cv_rmse, 'nmbe': nmbe
                         }
                         
                         with open("saved_baseline.pkl", "wb") as f:
                             pickle.dump(st.session_state['model_data'], f)
                             
-                        st.success(f"✅ Model Trained & Saved to Server! R²: {r2:.4f}")
+                        # Display Compliance Results
+                        st.success("✅ Model Trained & Saved to Server!")
+                        st.write("### Baseline Compliance Metrics")
+                        st.write(f"**R² Score:** {r2:.4f} *(Target: > 0.75)*")
+                        st.write(f"**CV(RMSE):** {cv_rmse:.2f}% *(Target: < 15%)*")
+                        st.write(f"**NMBE:** {nmbe:.2f}% *(Target: < ±5%)*")
                     else:
                         st.warning("Please select Y and at least one X variable.")
             else:
-                st.error(f"⚠️ Error: Your CSV has {len(df_baseline)} rows. It must have exactly 12 rows (Jan-Dec) for the CDD data to match correctly.")
+                st.error(f"⚠️ Error: Your CSV has {len(df_baseline)} rows. It must have exactly 12 rows (Jan-Dec).")
         st.markdown("---")
 
     # ------------------------------------------
@@ -133,7 +143,6 @@ else:
     else:
         st.success("✅ Baseline Model is Active and Ready.")
         
-        # New Dropdown for Year Selection
         rep_year = st.selectbox("Select Reporting Year:", ["2019", "2023", "2024", "2025"], key="rep_yr")
         rep_file = st.file_uploader("Upload Reporting CSV (12 Months)", type=['csv'], key="rep_csv")
         
@@ -153,7 +162,7 @@ else:
                     
                     missing = [col for col in x_vars if col not in df_reporting.columns]
                     if missing:
-                        st.error(f"Missing required columns in CSV: {missing}. Make sure you are using the same variables as the baseline.")
+                        st.error(f"Missing required columns in CSV: {missing}.")
                     else:
                         clean_rep = df_reporting[x_vars + [y_col]].dropna()
                         X_rep = clean_rep[x_vars]
@@ -177,4 +186,4 @@ else:
                         
                         st.pyplot(fig)
             else:
-                st.error(f"⚠️ Error: Your CSV has {len(df_reporting)} rows. It must have exactly 12 rows (Jan-Dec) for the CDD data to match correctly.")
+                st.error(f"⚠️ Error: Your CSV has {len(df_reporting)} rows. It must have exactly 12 rows (Jan-Dec).")
